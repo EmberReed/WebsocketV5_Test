@@ -7,7 +7,7 @@ Public Class Form1
     Public OBS As OBSWebsocket
     Public OBSmutex As Mutex
     Public OBSsocketString = "ws://192.168.1.205:4455"
-    Public OBSsocketPassword = "GiStmbwArr0plsAP"
+    Public OBSsocketPassword
     Public CurrentScene As ObsScene
     Public WaitForConnect As Boolean
     Public OBSstarted As TaskCompletionSource(Of Boolean)
@@ -38,7 +38,8 @@ Public Class Form1
 
     End Structure
     Private Sub Form1_Load(sender As Object, e As EventArgs) Handles MyBase.Load
-        Enabled = False
+        Me.Size = New Size(465, 81)
+
         OBS = New OBSWebsocket
         OBSmutex = New Mutex
         AddHandler OBS.SceneTransitionEnded, AddressOf HandleSceneChanged
@@ -48,13 +49,36 @@ Public Class Form1
         AddHandler OBS.MediaInputPlaybackEnded, AddressOf MediaEnded
         AddHandler OBS.MediaInputActionTriggered, AddressOf MediaEvent
     End Sub
+    Public UpTime As Integer
+    Public StopCount As Boolean
+
+    Public Async Function CountUpTime() As Task
+        UpTime = 0
+        StopCount = False
+        Await Task.Delay(1000)
+        Do Until StopCount = True
+            UpTime = UpTime + 1
+            Await Task.Delay(1000)
+        Loop
+        StopCount = False
+        SendMessage(UpTime)
+    End Function
+
+    Private Sub Start_Click(sender As Object, e As EventArgs) Handles Start.Click
+        Enabled = False
+        Dim StartTask As Task = Startup()
+    End Sub
+
 
     Private Sub Form1_Shown(sender As Object, e As EventArgs) Handles MyBase.Shown
-        Dim StartTask As Task = Startup()
+        TextBox2.Text = OBSsocketString
+
     End Sub
 
     Private Async Function Startup() As Task
         If Await CheckOBSconnect() Then Enabled = True
+        Me.Size = New Size(465, 223)
+        Await CountUpTime()
     End Function
 
     Private Sub OBSconnected(sender As Object, e As EventArgs)
@@ -90,7 +114,8 @@ Public Class Form1
     End Sub
 
     Private Sub OBSdisconnected(sender As Object, e As Communication.ObsDisconnectionInfo)
-        'SendMessage(e.DisconnectReason)
+        SendMessage(e.DisconnectReason)
+        StopCount = True
         If WaitForDisconnect Then OBSended.SetResult(False)
     End Sub
 
@@ -152,44 +177,44 @@ Public Class Form1
             Try
                 OBSstarted = New TaskCompletionSource(Of Boolean)
                 WaitForConnect = True
-                OBS.Connect(OBSsocketString, OBSsocketPassword)
+                OBS.Connect(TextBox2.Text, TextBox3.Text)
                 WaitForConnect = Await OBSstarted.Task
                 CurrentScene = OBS.GetCurrentProgramScene
-                Select Case OBS.GetMediaInputStatus("Ember Sprite").State
-                    Case MediaActions.Playing, MediaActions.Openning, MediaActions.Bufferring
-                        Button5.BackColor = SystemColors.ActiveCaption
-                        Button6.BackColor = SystemColors.Control
-                        Button7.BackColor = SystemColors.Control
-                    Case MediaActions.Paused
-                        Button5.BackColor = SystemColors.Control
-                        Button6.BackColor = SystemColors.ActiveCaption
-                        Button7.BackColor = SystemColors.Control
-                    Case MediaActions.Stopped, MediaActions.Ended, MediaActions.Errorr, MediaActions.None
-                        Button5.BackColor = SystemColors.Control
-                        Button6.BackColor = SystemColors.Control
-                        Button7.BackColor = SystemColors.ActiveCaption
-                    Case Else
-                        SendMessage(OBS.GetMediaInputStatus("Ember Sprite").State)
-                End Select
-                MyVolume = OBS.GetInputVolume("Ember's PC Audio")
+                'Select Case OBS.GetMediaInputStatus("Ember Sprite").State
+                '    Case MediaActions.Playing, MediaActions.Openning, MediaActions.Bufferring
+                '        Button5.BackColor = SystemColors.ActiveCaption
+                '        Button6.BackColor = SystemColors.Control
+                '        Button7.BackColor = SystemColors.Control
+                '    Case MediaActions.Paused
+                '        Button5.BackColor = SystemColors.Control
+                '        Button6.BackColor = SystemColors.ActiveCaption
+                '        Button7.BackColor = SystemColors.Control
+                '    Case MediaActions.Stopped, MediaActions.Ended, MediaActions.Errorr, MediaActions.None
+                '        Button5.BackColor = SystemColors.Control
+                '        Button6.BackColor = SystemColors.Control
+                '        Button7.BackColor = SystemColors.ActiveCaption
+                '    Case Else
+                '        SendMessage(OBS.GetMediaInputStatus("Ember Sprite").State)
+                'End Select
+                'MyVolume = OBS.GetInputVolume("Ember's PC Audio")
 
-                NumericUpDown1.Value = MyVolume.VolumeDb
+                'NumericUpDown1.Value = MyVolume.VolumeDb
 
-                If OBS.GetInputMute("Ember's PC Audio") Then
-                    Button8.BackColor = SystemColors.ActiveCaption
-                Else
-                    Button8.BackColor = SystemColors.Control
-                End If
+                'If OBS.GetInputMute("Ember's PC Audio") Then
+                '    Button8.BackColor = SystemColors.ActiveCaption
+                'Else
+                '    Button8.BackColor = SystemColors.Control
+                'End If
 
-                Select Case OBS.GetInputAudioMonitorType("Ember's PC Audio")
-                    Case MonitorType.None
-                        Button9.BackColor = SystemColors.Control
-                    Case Else
-                        Button9.BackColor = SystemColors.ActiveCaption
-                End Select
+                'Select Case OBS.GetInputAudioMonitorType("Ember's PC Audio")
+                '    Case MonitorType.None
+                '        Button9.BackColor = SystemColors.Control
+                '    Case Else
+                '        Button9.BackColor = SystemColors.ActiveCaption
+                'End Select
 
                 OBSmutex.ReleaseMutex()
-                SceneChanged(CurrentScene.Name)
+                'SceneChanged(CurrentScene.Name)
                 Return True
             Catch ex As Exception
                 OBSmutex.ReleaseMutex()
@@ -328,4 +353,5 @@ Public Class Form1
             OBSmutex.ReleaseMutex()
         End If
     End Sub
+
 End Class
