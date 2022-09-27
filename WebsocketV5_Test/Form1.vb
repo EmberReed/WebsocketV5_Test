@@ -4,18 +4,22 @@ Imports OBSWebsocketDotNet.Types
 
 Public Class Form1
 
-    Public OBS As OBSWebsocket
-    Public OBSmutex As Mutex
-    Public OBSsocketString = "ws://192.168.1.205:4455"
-    Public OBSsocketPassword
-    Public CurrentScene As ObsScene
-    Public WaitForConnect As Boolean
-    Public OBSstarted As TaskCompletionSource(Of Boolean)
-    Public WaitForDisconnect As Boolean
-    Public OBSended As TaskCompletionSource(Of Boolean)
-    Public MyVolume As VolumeInfo
+    Private OBS As OBSWebsocket
+    Private OBSmutex As Mutex
+    Private OBSsocketString = "ws://192.168.1.205:4455"
+    Private CurrentScene As String
+    Private WaitForConnect As Boolean
+    Private OBSstarted As TaskCompletionSource(Of Boolean)
+    Private WaitForDisconnect As Boolean
+    Private OBSended As TaskCompletionSource(Of Boolean)
+    Private MyVolume As VolumeInfo
+    Private VideoTestInput As String = "Ember Gears"
+    Private AudioTestInput As String = "Ember's PC Audio"
+    Private TextTestInput As String = "GlobalCounterTitle"
+    Private TestScene1 As String = "Single Screen Mode"
+    Private TestScene2 As String = "Split Screen Mode"
 
-    Public Structure MediaActions
+    Private Structure MediaActions
         Public Const Restart As String = "OBS_WEBSOCKET_MEDIA_INPUT_ACTION_RESTART"
         Public Const Play As String = "OBS_WEBSOCKET_MEDIA_INPUT_ACTION_PLAY"
         Public Const Pause As String = "OBS_WEBSOCKET_MEDIA_INPUT_ACTION_PAUSE"
@@ -31,12 +35,13 @@ Public Class Form1
     End Structure
 
 
-    Public Structure MonitorType
+    Private Structure MonitorType
         Public Const None As String = "OBS_MONITORING_TYPE_NONE"
         Public Const Enabled As String = "OBS_MONITORING_TYPE_MONITOR_AND_OUTPUT"
         Public Const Only As String = "OBS_MONITORING_TYPE_MONITOR_ONLY"
 
     End Structure
+
     Private Sub Form1_Load(sender As Object, e As EventArgs) Handles MyBase.Load
         Me.Size = New Size(465, 81)
 
@@ -49,10 +54,11 @@ Public Class Form1
         AddHandler OBS.MediaInputPlaybackEnded, AddressOf MediaEnded
         AddHandler OBS.MediaInputActionTriggered, AddressOf MediaEvent
     End Sub
-    Public UpTime As Integer
-    Public StopCount As Boolean
 
-    Public Async Function CountUpTime() As Task
+    Private UpTime As Integer
+    Private StopCount As Boolean
+
+    Private Async Function CountUpTime() As Task
         UpTime = 0
         StopCount = False
         Await Task.Delay(1000)
@@ -61,7 +67,7 @@ Public Class Form1
             Await Task.Delay(1000)
         Loop
         StopCount = False
-        SendMessage(UpTime)
+        SendMessage(ErrorMessage & " after " & UpTime & " seconds")
     End Function
 
     Private Sub Start_Click(sender As Object, e As EventArgs) Handles Start.Click
@@ -72,7 +78,6 @@ Public Class Form1
 
     Private Sub Form1_Shown(sender As Object, e As EventArgs) Handles MyBase.Shown
         TextBox2.Text = OBSsocketString
-
     End Sub
 
     Private Async Function Startup() As Task
@@ -85,9 +90,9 @@ Public Class Form1
         If WaitForConnect Then OBSstarted.SetResult(False)
     End Sub
 
-    Private Sub MediaEvent(Sender As OBSWebsocket, SourceName As String, EventString As String)
-        If SourceName = "Ember Sprite" Then
-            Select Case EventString
+    Private Sub MediaEvent(Sender As OBSWebsocket, e As Events.MediaInputActionTriggeredEventArgs)
+        If e.InputName = VideoTestInput Then
+            Select Case e.MediaAction
                 Case MediaActions.Restart, MediaActions.Play
                     Button5.BackColor = SystemColors.ActiveCaption
                     Button6.BackColor = SystemColors.Control
@@ -100,29 +105,31 @@ Public Class Form1
         End If
     End Sub
 
-    Private Sub MediaStarted(Sender As OBSWebsocket, SourceName As String)
-        If SourceName = "Ember Sprite" Then
-            SendMessage("Ember Started")
+    Private Sub MediaStarted(Sender As OBSWebsocket, e As Events.MediaInputPlaybackStartedEventArgs)
+        If e.InputName = VideoTestInput Then
+            SendMessage("Started")
         End If
     End Sub
-    Private Sub MediaEnded(Sender As OBSWebsocket, SourceName As String)
-        If SourceName = "Ember Sprite" Then
+    Private Sub MediaEnded(Sender As OBSWebsocket, e As Events.MediaInputPlaybackEndedEventArgs)
+        If e.InputName = VideoTestInput Then
             Button5.BackColor = SystemColors.Control
             Button6.BackColor = SystemColors.Control
             Button7.BackColor = SystemColors.ActiveCaption
         End If
     End Sub
 
+    Private ErrorMessage As String
     Private Sub OBSdisconnected(sender As Object, e As Communication.ObsDisconnectionInfo)
-        SendMessage(e.DisconnectReason)
+
+        ErrorMessage = e.DisconnectReason
         StopCount = True
         If WaitForDisconnect Then OBSended.SetResult(False)
     End Sub
 
-    Private Sub HandleSceneChanged(Sender As OBSWebsocket, TransitionName As String)
+    Private Sub HandleSceneChanged(Sender As OBSWebsocket, e As Events.SceneTransitionEndedEventArgs)
         OBSmutex.WaitOne()
         CurrentScene = OBS.GetCurrentProgramScene
-        Dim MyList As List(Of SceneItemDetails) = OBS.GetSceneItemList(CurrentScene.Name)
+        Dim MyList As List(Of SceneItemDetails) = OBS.GetSceneItemList(CurrentScene)
         Dim OutputString As String
         If MyList IsNot Nothing Then
             OutputString = MyList(0).ItemId & "_" & MyList(0).SourceName
@@ -135,7 +142,7 @@ Public Class Form1
 
         SendMessage(OutputString)
         OBSmutex.ReleaseMutex()
-        SceneChanged(CurrentScene.Name)
+        SceneChanged(CurrentScene)
     End Sub
 
     Private Sub SceneChanged(SceneName As String)
@@ -144,10 +151,10 @@ Public Class Form1
         BeginInvoke(
             Sub()
                 Select Case SceneName
-                    Case "Single Screen Mode"
+                    Case TestScene1
                         Button1.BackColor = SystemColors.ActiveCaption
                         Button2.BackColor = SystemColors.Control
-                    Case "Split Screen Mode"
+                    Case TestScene2
                         Button1.BackColor = SystemColors.Control
                         Button2.BackColor = SystemColors.ActiveCaption
                     Case Else
@@ -177,10 +184,10 @@ Public Class Form1
             Try
                 OBSstarted = New TaskCompletionSource(Of Boolean)
                 WaitForConnect = True
-                OBS.Connect(TextBox2.Text, TextBox3.Text)
+                OBS.ConnectAsync(TextBox2.Text, TextBox3.Text)
                 WaitForConnect = Await OBSstarted.Task
                 CurrentScene = OBS.GetCurrentProgramScene
-                'Select Case OBS.GetMediaInputStatus("Ember Sprite").State
+                'Select Case OBS.GetMediaInputStatus(VideoTestInput).State
                 '    Case MediaActions.Playing, MediaActions.Openning, MediaActions.Bufferring
                 '        Button5.BackColor = SystemColors.ActiveCaption
                 '        Button6.BackColor = SystemColors.Control
@@ -194,9 +201,9 @@ Public Class Form1
                 '        Button6.BackColor = SystemColors.Control
                 '        Button7.BackColor = SystemColors.ActiveCaption
                 '    Case Else
-                '        SendMessage(OBS.GetMediaInputStatus("Ember Sprite").State)
+                '        SendMessage(OBS.GetMediaInputStatus(VideoTestInput).State)
                 'End Select
-                'MyVolume = OBS.GetInputVolume("Ember's PC Audio")
+                'MyVolume = OBS.GetInputVolume(AudioTestInput)
 
                 'NumericUpDown1.Value = MyVolume.VolumeDb
 
@@ -206,7 +213,7 @@ Public Class Form1
                 '    Button8.BackColor = SystemColors.Control
                 'End If
 
-                'Select Case OBS.GetInputAudioMonitorType("Ember's PC Audio")
+                'Select Case OBS.GetInputAudioMonitorType(AudioTestInput)
                 '    Case MonitorType.None
                 '        Button9.BackColor = SystemColors.Control
                 '    Case Else
@@ -239,21 +246,21 @@ Public Class Form1
 
     Private Sub Button1_Click(sender As Object, e As EventArgs) Handles Button1.Click
         'SendMessage(CurrentScene.Name)
-        If CurrentScene.Name <> "Single Screen Mode" Then
+        If CurrentScene <> TestScene1 Then
             OBSmutex.WaitOne()
             Button1.Enabled = False
             Button2.Enabled = False
-            OBS.SetCurrentProgramScene("Single Screen Mode")
+            OBS.SetCurrentProgramScene(TestScene1)
             OBSmutex.ReleaseMutex()
         End If
     End Sub
     Private Sub Button2_Click(sender As Object, e As EventArgs) Handles Button2.Click
         'SendMessage(CurrentScene.Name)
-        If CurrentScene.Name <> "Split Screen Mode" Then
+        If CurrentScene <> TestScene2 Then
             OBSmutex.WaitOne()
             Button1.Enabled = False
             Button2.Enabled = False
-            OBS.SetCurrentProgramScene("Split Screen Mode")
+            OBS.SetCurrentProgramScene(TestScene2)
             OBSmutex.ReleaseMutex()
         End If
     End Sub
@@ -261,7 +268,7 @@ Public Class Form1
     Private Sub TextBox1_TextChanged(sender As Object, e As KeyPressEventArgs) Handles TextBox1.KeyPress
         If e.KeyChar = Chr(13) And TextBox1.Text <> "" Then
             OBSmutex.WaitOne()
-            Dim InputSettings As InputSettings = OBS.GetInputSettings("GlobalCounterTitle")
+            Dim InputSettings As InputSettings = OBS.GetInputSettings(TextTestInput)
             InputSettings.Settings.Property("text").Value = TextBox1.Text
             OBS.SetInputSettings(InputSettings)
             OBSmutex.ReleaseMutex()
@@ -278,56 +285,56 @@ Public Class Form1
 
     Private Sub Button3_Click(sender As Object, e As EventArgs) Handles Button3.Click
         OBSmutex.WaitOne()
-        Dim MyID As Integer = OBS.GetSceneItemId(CurrentScene.Name, "Ember", 0)
+        Dim MyID As Integer = OBS.GetSceneItemId(CurrentScene, "Ember", 0)
         'SendMessage(MyID)
-        If OBS.GetSceneItemEnabled(CurrentScene.Name, MyID) Then
-            OBS.SetSceneItemEnabled(CurrentScene.Name, MyID, False)
+        If OBS.GetSceneItemEnabled(CurrentScene, MyID) Then
+            OBS.SetSceneItemEnabled(CurrentScene, MyID, False)
         Else
-            OBS.SetSceneItemEnabled(CurrentScene.Name, MyID, True)
+            OBS.SetSceneItemEnabled(CurrentScene, MyID, True)
         End If
         OBSmutex.ReleaseMutex()
     End Sub
 
     Private Sub Button4_Click(sender As Object, e As EventArgs) Handles Button4.Click
-        OBSmutex.WaitOne()
-        Dim InputSettings As InputSettings = OBS.GetInputSettings("Ember Sprite")
-        Dim OutputString As String = InputSettings.Settings.ToString
+        'OBSmutex.WaitOne()
+        'Dim InputSettings As InputSettings = OBS.GetInputSettings(VideoTestInput)
+        'Dim OutputString As String = InputSettings.Settings.ToString
 
-        Dim LocalFile As String = InputSettings.Settings.Property("local_file").Value
-        If InStr(LocalFile, "blink") > 0 Then
-            LocalFile = Replace(LocalFile, "blink", "happy")
-        ElseIf InStr(LocalFile, "happy") > 0 Then
-            LocalFile = Replace(LocalFile, "happy", "blink")
-        End If
-        InputSettings.Settings.Property("local_file").Value = LocalFile
-        OBS.SetInputSettings(InputSettings)
+        'Dim LocalFile As String = InputSettings.Settings.Property("local_file").Value
+        'If InStr(LocalFile, "blink") > 0 Then
+        '    LocalFile = Replace(LocalFile, "blink", "happy")
+        'ElseIf InStr(LocalFile, "happy") > 0 Then
+        '    LocalFile = Replace(LocalFile, "happy", "blink")
+        'End If
+        'InputSettings.Settings.Property("local_file").Value = LocalFile
+        'OBS.SetInputSettings(InputSettings)
 
-        OBSmutex.ReleaseMutex()
+        'OBSmutex.ReleaseMutex()
     End Sub
 
     Private Sub Button5_Click(sender As Object, e As EventArgs) Handles Button5.Click
         OBSmutex.WaitOne()
-        OBS.TriggerMediaInputAction("Ember Sprite", MediaActions.Restart)
+        OBS.TriggerMediaInputAction(VideoTestInput, MediaActions.Restart)
         OBSmutex.ReleaseMutex()
     End Sub
     Private Sub Button6_Click(sender As Object, e As EventArgs) Handles Button6.Click
         OBSmutex.WaitOne()
-        OBS.TriggerMediaInputAction("Ember Sprite", MediaActions.Pause)
+        OBS.TriggerMediaInputAction(VideoTestInput, MediaActions.Pause)
         OBSmutex.ReleaseMutex()
     End Sub
     Private Sub Button7_Click(sender As Object, e As EventArgs) Handles Button7.Click
         OBSmutex.WaitOne()
-        OBS.TriggerMediaInputAction("Ember Sprite", MediaActions.Stopp)
+        OBS.TriggerMediaInputAction(VideoTestInput, MediaActions.Stopp)
         OBSmutex.ReleaseMutex()
     End Sub
 
     Private Sub Button8_Click(sender As Object, e As EventArgs) Handles Button8.Click
         OBSmutex.WaitOne()
-        If OBS.GetInputMute("Ember's PC Audio") Then
-            OBS.SetInputMute("Ember's PC Audio", False)
+        If OBS.GetInputMute(AudioTestInput) Then
+            OBS.SetInputMute(AudioTestInput, False)
             Button8.BackColor = SystemColors.Control
         Else
-            OBS.SetInputMute("Ember's PC Audio", True)
+            OBS.SetInputMute(AudioTestInput, True)
             Button8.BackColor = SystemColors.ActiveCaption
         End If
         OBSmutex.ReleaseMutex()
@@ -335,12 +342,12 @@ Public Class Form1
 
     Private Sub Button9_Click(sender As Object, e As EventArgs) Handles Button9.Click
         OBSmutex.WaitOne()
-        Select Case OBS.GetInputAudioMonitorType("Ember's PC Audio")
+        Select Case OBS.GetInputAudioMonitorType(AudioTestInput)
             Case MonitorType.None
-                OBS.SetInputAudioMonitorType("Ember's PC Audio", MonitorType.Enabled)
+                OBS.SetInputAudioMonitorType(AudioTestInput, MonitorType.Enabled)
                 Button9.BackColor = SystemColors.ActiveCaption
             Case Else
-                OBS.SetInputAudioMonitorType("Ember's PC Audio", MonitorType.None)
+                OBS.SetInputAudioMonitorType(AudioTestInput, MonitorType.None)
                 Button9.BackColor = SystemColors.Control
         End Select
         OBSmutex.ReleaseMutex()
@@ -349,7 +356,7 @@ Public Class Form1
     Private Sub NumericUpDown1_ValueChanged(sender As Object, e As EventArgs) Handles NumericUpDown1.ValueChanged
         If Enabled Then
             OBSmutex.WaitOne()
-            OBS.SetInputVolume("Ember's PC Audio", NumericUpDown1.Value, True)
+            OBS.SetInputVolume(AudioTestInput, NumericUpDown1.Value, True)
             OBSmutex.ReleaseMutex()
         End If
     End Sub
